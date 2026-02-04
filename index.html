@@ -1,126 +1,133 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <title>Live Light</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <style>
-    html, body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: black;
-    }
-    #screen {
-      width: 100%;
-      height: 100%;
-      transition: background 0.25s linear;
-    }
-    #hint {
-      position: fixed;
-      bottom: 10px;
-      width: 100%;
-      text-align: center;
-      color: rgba(255,255,255,0.6);
-      font-size: 12px;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>Penlight Live</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: black;
+  overflow: hidden;
+}
+
+#screen {
+  width: 100%;
+  height: 100%;
+  background: black;
+}
+
+#hint {
+  position: fixed;
+  bottom: 10px;
+  width: 100%;
+  text-align: center;
+  color: rgba(255,255,255,0.6);
+  font-size: 12px;
+}
+</style>
 </head>
+
 <body>
-  <div id="screen"></div>
-  <div id="hint">タップしてマイクを許可してください</div>
+<div id="screen"></div>
+<div id="hint">タップしてマイクを許可してください</div>
 
-  <script>
-    const screen = document.getElementById("screen");
-    const hint = document.getElementById("hint");
+<script>
+const screen = document.getElementById("screen");
+const hint = document.getElementById("hint");
 
-    // 🎨 ベースカラーパレット（HSL）
-    const palette = [
-      { h: 0,   s: 0,  l: 100 }, // 白（無音用）
-      { h: 200, s: 80, l: 75  }, // 水色
-      { h: 50,  s: 90, l: 75  }, // 黄色
-      { h: 30,  s: 90, l: 70  }, // オレンジ
-      { h: 330, s: 80, l: 75  }, // ピンク
-      { h: 270, s: 70, l: 75  }  // 紫
-    ];
+// 🎨 ペンライト用パレット（白少なめ）
+const palette = [
+  { h: 200, s: 85, l: 65 }, // 水色
+  { h: 50,  s: 95, l: 65 }, // 黄色
+  { h: 30,  s: 95, l: 60 }, // オレンジ
+  { h: 330, s: 85, l: 65 }, // ピンク
+  { h: 270, s: 75, l: 65 }  // 紫
+];
 
-    let audioContext, analyser, dataArray;
-    let smoothVolume = 0;
-    let lastVolume = 0;
+let audioContext, analyser, dataArray;
+let smoothVolume = 0;
+let glow = 0;
 
-    async function startMic() {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const source = audioContext.createMediaStreamSource(stream);
+async function startMic() {
+  audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const source = audioContext.createMediaStreamSource(stream);
 
-      analyser = audioContext.createAnalyser();
-      analyser.fftSize = 512;
+  analyser = audioContext.createAnalyser();
+  analyser.fftSize = 512;
 
-      dataArray = new Uint8Array(analyser.fftSize);
-      source.connect(analyser);
+  dataArray = new Uint8Array(analyser.fftSize);
+  source.connect(analyser);
 
-      hint.style.display = "none";
-      animate();
-    }
+  hint.style.display = "none";
+  animate();
+}
 
-    function lerp(a, b, t) {
-      return a + (b - a) * t;
-    }
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
 
-    function getColorFromPalette(t) {
-      const n = palette.length - 1;
-      const index = Math.floor(t * n);
-      const frac = t * n - index;
+function getColor(t) {
+  const n = palette.length - 1;
+  const i = Math.floor(t * n);
+  const f = t * n - i;
 
-      const c1 = palette[index];
-      const c2 = palette[Math.min(index + 1, n)];
+  const c1 = palette[i];
+  const c2 = palette[Math.min(i + 1, n)];
 
-      return {
-        h: lerp(c1.h, c2.h, frac),
-        s: lerp(c1.s, c2.s, frac),
-        l: lerp(c1.l, c2.l, frac)
-      };
-    }
+  return {
+    h: lerp(c1.h, c2.h, f),
+    s: lerp(c1.s, c2.s, f),
+    l: lerp(c1.l, c2.l, f)
+  };
+}
 
-    function animate() {
-      analyser.getByteTimeDomainData(dataArray);
+function animate() {
+  analyser.getByteTimeDomainData(dataArray);
 
-      let sum = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        const v = (dataArray[i] - 128) / 128;
-        sum += v * v;
-      }
-      const volume = Math.sqrt(sum / dataArray.length);
+  let sum = 0;
+  for (let i = 0; i < dataArray.length; i++) {
+    const v = (dataArray[i] - 128) / 128;
+    sum += v * v;
+  }
+  const volume = Math.sqrt(sum / dataArray.length);
 
-      // 🌊 音量の平滑化
-      smoothVolume = smoothVolume * 0.9 + volume * 0.1;
+  // 🎚 音量をかなり誇張
+  smoothVolume = smoothVolume * 0.85 + volume * 0.15;
+  const boosted = Math.pow(smoothVolume * 7, 1.3);
 
-      // ⚡ 音の勢い（変化量）
-      const energy = Math.abs(smoothVolume - lastVolume);
-      lastVolume = smoothVolume;
+  // ✨ 残光（ペンライト感の核）
+  glow = glow * 0.85 + boosted * 0.15;
 
-      // 🌙 時間によるゆらぎ
-      const time = performance.now() * 0.0003;
-      const wobble = (Math.sin(time) + 1) * 0.04;
+  // 🌈 色はゆっくり漂う
+  const time = performance.now() * 0.00015;
+  let t = (glow * 0.8 + Math.sin(time) * 0.2);
+  t = Math.min(Math.max(t, 0), 1);
 
-      // 🎚 色位置決定（白ゾーン削減）
-      let t = smoothVolume * 2.2 + energy * 6 + wobble;
-      t = Math.min(Math.max(t, 0.15), 1);
+  const c = getColor(t);
 
-      const color = getColorFromPalette(t);
+  // 🔥 発光サイズ
+  const radius = 30 + glow * 80;
 
-      // ✨ 明るさを音で呼吸させる
-      const lightness = color.l + smoothVolume * 18;
+  screen.style.background = `
+    radial-gradient(
+      circle at center,
+      hsla(${c.h}, ${c.s}%, ${c.l + 20}%, 0.95) 0%,
+      hsla(${c.h}, ${c.s}%, ${c.l}%, 0.6) ${radius}%,
+      hsla(${c.h}, ${c.s}%, ${c.l - 10}%, 0.25) ${radius + 15}%,
+      rgba(0,0,0,1) 100%
+    )
+  `;
 
-      screen.style.background =
-        `hsl(${color.h}, ${color.s}%, ${lightness}%)`;
+  requestAnimationFrame(animate);
+}
 
-      requestAnimationFrame(animate);
-    }
-
-    document.body.addEventListener("touchstart", startMic, { once: true });
-    document.body.addEventListener("click", startMic, { once: true });
-  </script>
+document.body.addEventListener("touchstart", startMic, { once: true });
+document.body.addEventListener("click", startMic, { once: true });
+</script>
 </body>
 </html>
