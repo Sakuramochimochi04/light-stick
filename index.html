@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Light Stick</title>
+
   <style>
     body {
       margin: 0;
@@ -13,51 +14,64 @@
       justify-content: center;
       align-items: center;
       color: white;
-      font-size: 24px;
+      font-size: 22px;
       user-select: none;
-      transition: background-color 0.1s linear;
+      transition: background-color 0.08s linear;
+      text-align: center;
     }
 
     button {
       font-size: 20px;
-      padding: 20px 30px;
-      border-radius: 10px;
+      padding: 20px 32px;
+      border-radius: 12px;
       border: none;
+      background: white;
+      color: black;
     }
   </style>
 </head>
+
 <body>
   <button id="start">タップして開始</button>
 
   <script>
-    const button = document.getElementById("start");
+    const startButton = document.getElementById("start");
 
-    button.addEventListener("click", async () => {
-      button.remove();
+    startButton.addEventListener("click", async () => {
+      startButton.remove();
 
+      // マイク取得
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const audioContext = new AudioContext();
+
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
 
-      analyser.fftSize = 256;
+      analyser.fftSize = 512;
       source.connect(analyser);
 
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const dataArray = new Uint8Array(analyser.fftSize);
 
       function animate() {
-        analyser.getByteFrequencyData(dataArray);
+        analyser.getByteTimeDomainData(dataArray);
 
-        // 音量の平均を取る
+        // 振幅ベースの音量計算（スマホ向けに安定）
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
+          const v = dataArray[i] - 128;
+          sum += Math.abs(v);
         }
+
         const volume = sum / dataArray.length;
 
-        // 音量 → 色に変換
-        const hue = Math.min(360, volume * 2);
-        document.body.style.backgroundColor = `hsl(${hue}, 100%, 50%)`;
+        // 音量 → 色相（強めに）
+        const hue = Math.min(360, volume * 8);
+
+        // 無音時は暗めに
+        const lightness = Math.min(60, 20 + volume * 2);
+
+        document.body.style.backgroundColor =
+          `hsl(${hue}, 100%, ${lightness}%)`;
 
         requestAnimationFrame(animate);
       }
