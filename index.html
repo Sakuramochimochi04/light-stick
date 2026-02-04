@@ -2,83 +2,116 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
+  <title>Live Light</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Light Stick</title>
-
   <style>
-    body {
+    html, body {
       margin: 0;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
       background: black;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      color: white;
-      font-size: 22px;
-      user-select: none;
-      transition: background-color 0.06s linear;
-      text-align: center;
     }
-
-    button {
-      font-size: 20px;
-      padding: 20px 32px;
-      border-radius: 12px;
-      border: none;
-      background: white;
-      color: black;
+    #screen {
+      width: 100%;
+      height: 100%;
+      transition: background 0.2s linear;
+    }
+    #hint {
+      position: fixed;
+      bottom: 10px;
+      width: 100%;
+      text-align: center;
+      color: rgba(255,255,255,0.6);
+      font-size: 12px;
     }
   </style>
 </head>
-
 <body>
-  <button id="start">タップして開始</button>
+  <div id="screen"></div>
+  <div id="hint">タップしてマイクを許可してください</div>
 
   <script>
-    const startButton = document.getElementById("start");
+    const screen = document.getElementById("screen");
+    const hint = document.getElementById("hint");
 
-    startButton.addEventListener("click", async () => {
-      startButton.remove();
+    // 🎨 ベースカラーパレット（HSL）
+    const palette = [
+      { h: 0,   s: 0,  l: 100 }, // 白
+      { h: 200, s: 80, l: 75  }, // 水色
+      { h: 50,  s: 90, l: 75  }, // 黄色
+      { h: 30,  s: 90, l: 70  }, // オレンジ
+      { h: 330, s: 80, l: 75  }, // ピンク
+      { h: 270, s: 70, l: 75  }  // 紫
+    ];
 
-      // マイク取得
+    let audioContext, analyser, dataArray;
+    let smoothVolume = 0;
+
+    async function startMic() {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      // iOS対策：明示的に AudioContext を起動
-      const audioContext =
-        new (window.AudioContext || window.webkitAudioContext)();
-      await audioContext.resume();
-
       const source = audioContext.createMediaStreamSource(stream);
-      const analyser = audioContext.createAnalyser();
 
+      analyser = audioContext.createAnalyser();
       analyser.fftSize = 512;
+
+      dataArray = new Uint8Array(analyser.fftSize);
       source.connect(analyser);
 
-      const dataArray = new Uint8Array(analyser.fftSize);
-
-      function animate() {
-        analyser.getByteTimeDomainData(dataArray);
-
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          const v = dataArray[i] - 128;
-          sum += Math.abs(v);
-        }
-
-        const volume = sum / dataArray.length;
-
-        // 反応をさらに強める（公演向け）
-        const hue = Math.min(360, volume * 12);
-        const lightness = Math.min(65, 25 + volume * 3);
-
-        document.body.style.backgroundColor =
-          `hsl(${hue}, 100%, ${lightness}%)`;
-
-        requestAnimationFrame(animate);
-      }
-
+      hint.style.display = "none";
       animate();
-    });
+    }
+
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function getColorFromPalette(t) {
+      const n = palette.length - 1;
+      const index = Math.floor(t * n);
+      const frac = t * n - index;
+
+      const c1 = palette[index];
+      const c2 = palette[Math.min(index + 1, n)];
+
+      return {
+        h: lerp(c1.h, c2.h, frac),
+        s: lerp(c1.s, c2.s, frac),
+        l: lerp(c1.l, c2.l, frac)
+      };
+    }
+
+    function animate() {
+      analyser.getByteTimeDomainData(dataArray);
+
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        const v = (dataArray[i] - 128) / 128;
+        sum += v * v;
+      }
+      const volume = Math.sqrt(sum / dataArray.length);
+
+      // 🌊 強めの平滑化（ちかちか防止）
+      smoothVolume = smoothVolume * 0.92 + volume * 0.08;
+
+      // 音量 → 0〜1 に圧縮
+      let t = Math.min(smoothVolume * 3, 1);
+
+      const color = getColorFromPalette(t);
+
+      // 音で少しだけ明るさを呼吸させる
+      const lightness = color.l + smoothVolume * 15;
+
+      screen.style.background =
+        `hsl(${color.h}, ${color.s}%, ${lightness}%)`;
+
+      requestAnimationFrame(animate);
+    }
+
+    // スマホ用：タップで開始
+    document.body.addEventListener("touchstart", startMic, { once: true });
+    document.body.addEventListener("click", startMic, { once: true });
   </script>
 </body>
 </html>
