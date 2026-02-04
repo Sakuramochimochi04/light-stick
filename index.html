@@ -15,18 +15,54 @@
       color: white;
       font-size: 24px;
       user-select: none;
+      transition: background-color 0.1s linear;
+    }
+
+    button {
+      font-size: 20px;
+      padding: 20px 30px;
+      border-radius: 10px;
+      border: none;
     }
   </style>
 </head>
 <body>
-  タップしてね
-  <script>
-    const colors = ["red", "blue", "green", "yellow", "purple", "cyan", "white"];
-    let i = 0;
+  <button id="start">タップして開始</button>
 
-    document.body.addEventListener("click", () => {
-      document.body.style.background = colors[i % colors.length];
-      i++;
+  <script>
+    const button = document.getElementById("start");
+
+    button.addEventListener("click", async () => {
+      button.remove();
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      function animate() {
+        analyser.getByteFrequencyData(dataArray);
+
+        // 音量の平均を取る
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const volume = sum / dataArray.length;
+
+        // 音量 → 色に変換
+        const hue = Math.min(360, volume * 2);
+        document.body.style.backgroundColor = `hsl(${hue}, 100%, 50%)`;
+
+        requestAnimationFrame(animate);
+      }
+
+      animate();
     });
   </script>
 </body>
