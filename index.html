@@ -3,31 +3,82 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Light Test</title>
+  <title>Light Stick</title>
+
   <style>
     body {
       margin: 0;
       height: 100vh;
+      background: black;
       display: flex;
       justify-content: center;
       align-items: center;
-      font-size: 22px;
-      background: black;
       color: white;
+      font-size: 22px;
+      user-select: none;
+      transition: background-color 0.06s linear;
+      text-align: center;
     }
+
     button {
       font-size: 20px;
       padding: 20px 32px;
+      border-radius: 12px;
+      border: none;
+      background: white;
+      color: black;
     }
   </style>
 </head>
+
 <body>
-  <button id="start">タップして色変更</button>
+  <button id="start">タップして開始</button>
 
   <script>
-    document.getElementById("start").onclick = () => {
-      document.body.style.backgroundColor = "red";
-    };
+    const startButton = document.getElementById("start");
+
+    startButton.addEventListener("click", async () => {
+      startButton.remove();
+
+      // マイク取得
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // iOS対策：明示的に AudioContext を起動
+      const audioContext =
+        new (window.AudioContext || window.webkitAudioContext)();
+      await audioContext.resume();
+
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+
+      analyser.fftSize = 512;
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.fftSize);
+
+      function animate() {
+        analyser.getByteTimeDomainData(dataArray);
+
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const v = dataArray[i] - 128;
+          sum += Math.abs(v);
+        }
+
+        const volume = sum / dataArray.length;
+
+        // 反応をさらに強める（公演向け）
+        const hue = Math.min(360, volume * 12);
+        const lightness = Math.min(65, 25 + volume * 3);
+
+        document.body.style.backgroundColor =
+          `hsl(${hue}, 100%, ${lightness}%)`;
+
+        requestAnimationFrame(animate);
+      }
+
+      animate();
+    });
   </script>
 </body>
 </html>
