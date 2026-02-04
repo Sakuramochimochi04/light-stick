@@ -16,7 +16,7 @@
       color: white;
       font-size: 22px;
       user-select: none;
-      transition: background-color 0.08s linear;
+      transition: background-color 0.06s linear;
       text-align: center;
     }
 
@@ -43,7 +43,11 @@
       // マイク取得
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      // iOS対策：明示的に AudioContext を起動
+      const audioContext =
+        new (window.AudioContext || window.webkitAudioContext)();
+      await audioContext.resume();
+
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
 
@@ -55,7 +59,6 @@
       function animate() {
         analyser.getByteTimeDomainData(dataArray);
 
-        // 振幅ベースの音量計算（スマホ向けに安定）
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) {
           const v = dataArray[i] - 128;
@@ -64,11 +67,9 @@
 
         const volume = sum / dataArray.length;
 
-        // 音量 → 色相（強めに）
-        const hue = Math.min(360, volume * 8);
-
-        // 無音時は暗めに
-        const lightness = Math.min(60, 20 + volume * 2);
+        // 反応をさらに強める（公演向け）
+        const hue = Math.min(360, volume * 12);
+        const lightness = Math.min(65, 25 + volume * 3);
 
         document.body.style.backgroundColor =
           `hsl(${hue}, 100%, ${lightness}%)`;
