@@ -15,7 +15,7 @@
     #screen {
       width: 100%;
       height: 100%;
-      transition: background 0.2s linear;
+      transition: background 0.25s linear;
     }
     #hint {
       position: fixed;
@@ -37,7 +37,7 @@
 
     // 🎨 ベースカラーパレット（HSL）
     const palette = [
-      { h: 0,   s: 0,  l: 100 }, // 白
+      { h: 0,   s: 0,  l: 100 }, // 白（無音用）
       { h: 200, s: 80, l: 75  }, // 水色
       { h: 50,  s: 90, l: 75  }, // 黄色
       { h: 30,  s: 90, l: 70  }, // オレンジ
@@ -47,6 +47,7 @@
 
     let audioContext, analyser, dataArray;
     let smoothVolume = 0;
+    let lastVolume = 0;
 
     async function startMic() {
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -92,16 +93,25 @@
       }
       const volume = Math.sqrt(sum / dataArray.length);
 
-      // 🌊 強めの平滑化（ちかちか防止）
-      smoothVolume = smoothVolume * 0.92 + volume * 0.08;
+      // 🌊 音量の平滑化
+      smoothVolume = smoothVolume * 0.9 + volume * 0.1;
 
-      // 音量 → 0〜1 に圧縮
-      let t = Math.min(smoothVolume * 3, 1);
+      // ⚡ 音の勢い（変化量）
+      const energy = Math.abs(smoothVolume - lastVolume);
+      lastVolume = smoothVolume;
+
+      // 🌙 時間によるゆらぎ
+      const time = performance.now() * 0.0003;
+      const wobble = (Math.sin(time) + 1) * 0.04;
+
+      // 🎚 色位置決定（白ゾーン削減）
+      let t = smoothVolume * 2.2 + energy * 6 + wobble;
+      t = Math.min(Math.max(t, 0.15), 1);
 
       const color = getColorFromPalette(t);
 
-      // 音で少しだけ明るさを呼吸させる
-      const lightness = color.l + smoothVolume * 15;
+      // ✨ 明るさを音で呼吸させる
+      const lightness = color.l + smoothVolume * 18;
 
       screen.style.background =
         `hsl(${color.h}, ${color.s}%, ${lightness}%)`;
@@ -109,7 +119,6 @@
       requestAnimationFrame(animate);
     }
 
-    // スマホ用：タップで開始
     document.body.addEventListener("touchstart", startMic, { once: true });
     document.body.addEventListener("click", startMic, { once: true });
   </script>
